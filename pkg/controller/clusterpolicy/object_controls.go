@@ -11,8 +11,11 @@ import (
 	gpuv1 "github.com/NVIDIA/gpu-operator/pkg/apis/nvidia/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
+
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -152,11 +155,11 @@ func ConfigMap(n ClusterPolicyController) (gpuv1.State, error) {
 	return gpuv1.Ready, nil
 }
 
-func kernelFullVersion(n ClusterPolicyController) (string, string, string) {
+func kernelFullVersion(n *ClusterPolicyController, config *gpuv1.ComponentSpec) (string, string, string) {
 	logger := log.WithValues("Request.Namespace", "default", "Request.Name", "Node")
 	// We need the node labels to fetch the correct container
 	opts := []client.ListOption{
-		client.MatchingLabels{"nvidia.com/gpu.present": "true"},
+		client.MatchingLabelsSelector{labels.Set(config.NodeSelector).AsSelector()},
 	}
 
 	list := &corev1.NodeList{}
@@ -318,7 +321,7 @@ func parseOSRelease() (map[string]string, error) {
 
 // TransformDriver transforms Nvidia driver daemonset with required config as per ClusterPolicy
 func TransformDriver(obj *appsv1.DaemonSet, config *gpuv1.ClusterPolicySpec, n ClusterPolicyController) error {
-	kvers, osTag, _ := kernelFullVersion(n)
+	kvers, osTag, _ := kernelFullVersion(&n, &config.Driver)
 	if kvers == "" {
 		return fmt.Errorf("ERROR: Could not find kernel full version: ('%s', '%s')", kvers, osTag)
 	}
@@ -496,7 +499,7 @@ func TransformDCGMExporter(obj *appsv1.DaemonSet, config *gpuv1.ClusterPolicySpe
 		}
 	}
 
-	kvers, osTag, _ := kernelFullVersion(n)
+	kvers, osTag, _ := kernelFullVersion(&n, &config.DCGMExporter)
 	if kvers == "" {
 		return fmt.Errorf("ERROR: Could not find kernel full version: ('%s', '%s')", kvers, osTag)
 	}
